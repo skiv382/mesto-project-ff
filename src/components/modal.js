@@ -32,9 +32,3 @@ export function closeModalEscape(evt) {
   }
 }
 
-document.querySelectorAll('.popup__close').forEach(button => {
-    button.addEventListener('click', () => {
-      const popup = button.closest('.popup');
-      closeModal(popup);
-    });
-  });

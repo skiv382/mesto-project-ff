@@ -1,5 +1,3 @@
-import { openModal } from "./modal";
-
 // @todo: Темплейт карточки
 const cardTemplate = document.querySelector("#card-template").content;
 
@@ -33,6 +31,11 @@ export function createCard(
   });
 
   return cardElement;
+}
+
+// Функция обработки лайка
+export function handleLikeClick(evt) {
+  evt.target.classList.toggle("card__like-button_is-active");
 }
 
 // @todo: Функция удаления карточки
