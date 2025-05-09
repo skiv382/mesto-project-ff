@@ -66,7 +66,7 @@ const profileJob = document.querySelector(".profile__description");
 // Обработчик отправки формы
 function handleEditProfileSubmit(evt) {
   evt.preventDefault();
-   // Обновляем данные профиля
+  // Обновляем данные профиля
   profileName.textContent = nameInput.value;
   profileJob.textContent = jobInput.value;
   closeModal(popupEditProfile);
