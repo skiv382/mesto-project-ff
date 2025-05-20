@@ -17,3 +17,24 @@
     padding: 30px 20px;
   }
 }
+
+/* Стили только для попапа удаления карточки */
+.popup_type_trash .popup__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 280px;
+  min-height: 180px;
+  padding: 36px 36px 36px 36px;
+}
+
+.popup_type_trash .popup__title {
+  margin-bottom: 38px;
+  text-align: center;
+}
+
+.popup_type_trash .popup__button {
+  width: 100%;
+  margin-top: 0;
+}
