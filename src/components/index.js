@@ -4,15 +4,15 @@ import { openModal, closeModal } from "./modal.js";
 import {
   config,
   getUserData,
-  getInitialCards,
   updateProfile,
   addNewCard,
   deleteCardApi,
   toggleLike,
   updateAvatar,
   validateImageUrl,
+  getInitialCards,
 } from "./api.js";
-import { enableFormValidation, resetFormValidation } from './validation.js';
+import { enableFormValidation, resetFormValidation } from "./validation.js";
 
 // DOM элементы
 const elements = {
@@ -33,6 +33,15 @@ const elements = {
   profileAvatar: document.querySelector(".profile__image"),
   popupAvatar: document.querySelector(".popup_type_new_avatar"),
   formAvatar: document.querySelector('.popup__form[name="new-avatar"]'),
+};
+
+const validationConfig = {
+  formSelector: ".popup__form",
+  inputSelector: ".popup__input",
+  submitButtonSelector: ".popup__button",
+  inactiveButtonClass: "popup__button_disabled",
+  inputErrorClass: "popup__input_type_error",
+  errorClass: "popup__error_visible",
 };
 
 // Установка конфигурации API
@@ -66,7 +75,6 @@ function renderProfile(userData) {
 
 // Рендеринг карточек
 function renderCards(cards) {
-  elements.cardsContainer.innerHTML = "";
   cards.forEach((card) => {
     const cardElement = createCard(
       card,
@@ -74,7 +82,8 @@ function renderCards(cards) {
       (cardId, isLiked) => handleLikeCard(cardId, isLiked),
       (link, name) => openPopupImage(link, name),
       currentUserId,
-      openModal
+      openModal,
+      closeModal
     );
     elements.cardsContainer.append(cardElement);
   });
@@ -84,23 +93,24 @@ function renderCards(cards) {
 function setupEventListeners() {
   // Редактирование профиля
   elements.buttonEditProfile.addEventListener("click", () => {
-  elements.nameInput.value = elements.nameTitle.textContent;
-  elements.aboutInput.value = elements.jobTitle.textContent;
-  resetFormValidation(elements.formEditProfile); // Сброс валидации
-  openModal(elements.popupEditProfile);
-});
+    elements.nameInput.value = elements.nameTitle.textContent;
+    elements.aboutInput.value = elements.jobTitle.textContent;
+    resetFormValidation(elements.formEditProfile, validationConfig); // Передаем конфигурацию
+    openModal(elements.popupEditProfile);
+  });
 
-elements.buttonAddCard.addEventListener("click", () => {
-  resetFormValidation(elements.formAddCard); // Сброс валидации
-  openModal(elements.popupAddCard);
-});
+  elements.buttonAddCard.addEventListener("click", () => {
+    elements.formAddCard.reset(); // Очищаем форму от старых значений
+    resetFormValidation(elements.formAddCard, validationConfig); // Передаем конфигурацию
+    openModal(elements.popupAddCard);
+  });
 
-enableFormValidation();
+  enableFormValidation(validationConfig); // Передаем конфигурацию
 
   // Обновление аватара
   elements.profileAvatar.addEventListener("click", () => {
     elements.formAvatar.reset(); // Сбрасываем форму
-    resetFormValidation(elements.formAvatar); // Сбрасываем валидацию
+    resetFormValidation(elements.formAvatar, validationConfig); // Передаем конфигурацию
     openModal(elements.popupAvatar);
   });
 
@@ -112,13 +122,27 @@ enableFormValidation();
 
   // Форма обновления аватара
   elements.formAvatar.addEventListener("submit", handleAvatarSubmit);
+
+  // Обработчики закрытия модальных окон
+  document.querySelectorAll(".popup__close").forEach((closeButton) => {
+    closeButton.addEventListener("click", () => {
+      const currentModal = closeButton.closest(".popup");
+      closeModal(currentModal);
+    });
+  });
+}
+
+// Утилитарная функция для управления состоянием кнопок
+function handleSubmitButton(button, isLoading, defaultText = "Сохранить") {
+  button.textContent = isLoading ? "Сохранение..." : defaultText;
+  button.disabled = isLoading;
 }
 
 // Обработчики форм
 function handleProfileSubmit(evt) {
   evt.preventDefault();
   const submitButton = evt.submitter;
-  submitButton.textContent = "Сохранение...";
+  handleSubmitButton(submitButton, true);
 
   updateProfile(elements.nameInput.value, elements.aboutInput.value)
     .then((userData) => {
@@ -129,7 +153,7 @@ function handleProfileSubmit(evt) {
       console.error("Ошибка при обновлении профиля:", err);
     })
     .finally(() => {
-      submitButton.textContent = "Сохранить";
+      handleSubmitButton(submitButton, false);
     });
 }
 
@@ -138,23 +162,40 @@ function handleAddCardSubmit(evt) {
   const submitButton = evt.submitter;
   const urlInput = elements.formAddCard.elements.link;
   const cardNameInput = elements.formAddCard.elements["place-name"];
+  const errorElement = elements.formAddCard.querySelector(
+    `.${urlInput.id}-error`
+  );
 
-  submitButton.textContent = "Сохранение...";
-  submitButton.disabled = true;
+  // Очищаем предыдущие ошибки
+  errorElement.textContent = "";
+  errorElement.classList.remove("popup__error_visible");
+
+  // Проверяем URL перед загрузкой
+  try {
+    new URL(urlInput.value);
+  } catch (e) {
+    errorElement.textContent = "Введите корректный URL";
+    errorElement.classList.add("popup__error_visible");
+    return;
+  }
+
+  handleSubmitButton(submitButton, true);
 
   // Предзагрузка изображения
   const preloadImage = new Image();
-  preloadImage.src = urlInput.value;
+  let timeoutId;
+
+  // Устанавливаем таймаут для предзагрузки
+  timeoutId = setTimeout(() => {
+    preloadImage.src = ""; // Останавливаем загрузку
+    errorElement.textContent = "Превышено время ожидания загрузки изображения";
+    errorElement.classList.add("popup__error_visible");
+    handleSubmitButton(submitButton, false);
+  }, 10000); // 10 секунд таймаут
 
   preloadImage.onload = () => {
-    // Проверка URL перед отправкой
-    validateImageUrl(urlInput.value)
-      .then((isValid) => {
-        if (!isValid) {
-          throw new Error("Ссылка не ведет на изображение");
-        }
-        return addNewCard(cardNameInput.value, urlInput.value);
-      })
+    clearTimeout(timeoutId);
+    addNewCard(cardNameInput.value, urlInput.value)
       .then((newCard) => {
         const cardElement = createCard(
           newCard,
@@ -162,7 +203,8 @@ function handleAddCardSubmit(evt) {
           (cardId, isLiked) => handleLikeCard(cardId, isLiked),
           (link, name) => openPopupImage(link, name),
           currentUserId,
-          openModal
+          openModal,
+          closeModal
         );
         elements.cardsContainer.prepend(cardElement);
         closeModal(elements.popupAddCard);
@@ -170,23 +212,23 @@ function handleAddCardSubmit(evt) {
       })
       .catch((err) => {
         console.error("Ошибка:", err);
-        const errorElement = elements.formAddCard.querySelector(`.${urlInput.id}-error`);
-        errorElement.textContent = err.message;
-        errorElement.classList.add('popup__error_visible');
+        errorElement.textContent =
+          err.message || "Произошла ошибка при создании карточки";
+        errorElement.classList.add("popup__error_visible");
       })
       .finally(() => {
-        submitButton.textContent = "Сохранить";
-        submitButton.disabled = false;
+        handleSubmitButton(submitButton, false);
       });
   };
 
   preloadImage.onerror = () => {
-    const errorElement = elements.formAddCard.querySelector(`.${urlInput.id}-error`);
+    clearTimeout(timeoutId);
     errorElement.textContent = "Не удалось загрузить изображение";
-    errorElement.classList.add('popup__error_visible');
-    submitButton.textContent = "Сохранить";
-    submitButton.disabled = false;
+    errorElement.classList.add("popup__error_visible");
+    handleSubmitButton(submitButton, false);
   };
+
+  preloadImage.src = urlInput.value;
 }
 
 function handleAvatarSubmit(evt) {
@@ -194,56 +236,73 @@ function handleAvatarSubmit(evt) {
   const submitButton = evt.submitter;
   const avatarInput = elements.formAvatar.elements.avatar;
   const avatarUrl = avatarInput.value;
-  const errorElement = elements.formAvatar.querySelector('.avatar-input-error');
-  
+  const errorElement = elements.formAvatar.querySelector(".avatar-input-error");
+
   // Очищаем предыдущие ошибки
-  errorElement.textContent = '';
-  errorElement.classList.remove('popup__error_visible');
-  
-  // Проверяем валидность URL перед отправкой
-  if (!avatarInput.validity.valid) {
-    errorElement.textContent = avatarInput.validationMessage;
-    errorElement.classList.add('popup__error_visible');
+  errorElement.textContent = "";
+  errorElement.classList.remove("popup__error_visible");
+
+  // Проверяем URL перед загрузкой
+  try {
+    new URL(avatarUrl);
+  } catch (e) {
+    errorElement.textContent = "Введите корректный URL";
+    errorElement.classList.add("popup__error_visible");
     return;
   }
-  
-  // Блокируем кнопку и меняем текст
-  submitButton.disabled = true;
-  submitButton.textContent = "Сохранение...";
 
-  // Проверка URL перед отправкой
-  validateImageUrl(avatarUrl)
-    .then((isValid) => {
-      if (!isValid) {
-        throw new Error("Не удалось загрузить изображение. Проверьте URL и попробуйте снова.");
-      }
-      return updateAvatar(avatarUrl);
-    })
-    .then((userData) => {
-      renderProfile(userData);
-      closeModal(elements.popupAvatar);
-      elements.formAvatar.reset();
-    })
-    .catch((err) => {
-      console.error("Ошибка при обновлении аватара:", err);
-      errorElement.textContent = err.message || "Произошла ошибка при обновлении аватара";
-      errorElement.classList.add('popup__error_visible');
-    })
-    .finally(() => {
-      submitButton.disabled = false;
-      submitButton.textContent = "Сохранить";
-    });
+  handleSubmitButton(submitButton, true);
+
+  // Предзагрузка изображения
+  const preloadImage = new Image();
+  let timeoutId;
+
+  // Устанавливаем таймаут для предзагрузки
+  timeoutId = setTimeout(() => {
+    preloadImage.src = ""; // Останавливаем загрузку
+    errorElement.textContent = "Превышено время ожидания загрузки изображения";
+    errorElement.classList.add("popup__error_visible");
+    handleSubmitButton(submitButton, false);
+  }, 10000); // 10 секунд таймаут
+
+  preloadImage.onload = () => {
+    clearTimeout(timeoutId);
+    updateAvatar(avatarUrl)
+      .then((userData) => {
+        renderProfile(userData);
+        closeModal(elements.popupAvatar);
+        elements.formAvatar.reset();
+      })
+      .catch((err) => {
+        console.error("Ошибка при обновлении аватара:", err);
+        errorElement.textContent =
+          err.message || "Произошла ошибка при обновлении аватара";
+        errorElement.classList.add("popup__error_visible");
+      })
+      .finally(() => {
+        handleSubmitButton(submitButton, false);
+      });
+  };
+
+  preloadImage.onerror = () => {
+    clearTimeout(timeoutId);
+    errorElement.textContent = "Не удалось загрузить изображение";
+    errorElement.classList.add("popup__error_visible");
+    handleSubmitButton(submitButton, false);
+  };
+
+  preloadImage.src = avatarUrl;
 }
 
 // Работа с карточками
 function handleLikeCard(cardId, isLiked) {
   return toggleLike(cardId, isLiked)
     .then((updatedCard) => {
-      return updatedCard.likes;
+      return updatedCard;
     })
     .catch((err) => {
       console.error("Ошибка при обработке лайка:", err);
-      throw err;
+      throw err; // Пробрасываем ошибку дальше для обработки в card.js
     });
 }
 
@@ -252,7 +311,7 @@ function handleDeleteCard(cardId) {
     .then(() => true)
     .catch((err) => {
       console.error("Ошибка при удалении карточки:", err);
-      return false;
+      throw err; // Пробрасываем ошибку дальше для обработки в card.js
     });
 }
 
@@ -263,14 +322,6 @@ function openPopupImage(imageSrc, imageAlt) {
   elements.popupImageDescription.textContent = imageAlt;
   openModal(elements.popupImageOpen);
 }
-
-// Поиск кнопки закрытия по всей странице для закрытия модального окна.
-document.addEventListener("click", function (evt) {
-  if (evt.target.classList.contains("popup__close")) {
-    const currentModal = evt.target.closest(".popup");
-    closeModal(currentModal);
-  }
-});
 
 // Инициализация приложения
 initApp();

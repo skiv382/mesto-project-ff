@@ -1,14 +1,10 @@
 export function openModal(currentModal) {
   if (!currentModal) return;
-  
-  // Удаляем предыдущие обработчики, если они есть
-  currentModal.removeEventListener("click", closeModalOverlay);
-  document.removeEventListener("keydown", closeModalEscape);
-  
+
   // Добавляем новые обработчики
   currentModal.addEventListener("click", closeModalOverlay);
   document.addEventListener("keydown", closeModalEscape);
-  
+
   // Открываем модальное окно
   currentModal.classList.add("popup_is-opened");
   currentModal.setAttribute("aria-hidden", "false");
